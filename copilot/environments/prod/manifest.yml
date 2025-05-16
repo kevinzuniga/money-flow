@@ -1,0 +1,73 @@
+# The manifest for the "prod" environment.
+# Read the full specification for the "Environment" type at:
+#  https://aws.github.io/copilot-cli/docs/manifest/environment/
+
+# Your environment name will be used in naming your resources like VPC, cluster, etc.
+name: prod
+type: Environment
+
+# Network configuration
+network:
+  vpc:
+    cidr: 10.0.0.0/16
+    subnets:
+      public:
+        - cidr: 10.0.0.0/24
+          az: us-east-1a
+        - cidr: 10.0.1.0/24
+          az: us-east-1b
+      private:
+        - cidr: 10.0.10.0/24
+          az: us-east-1a
+        - cidr: 10.0.11.0/24
+          az: us-east-1b
+
+# Configure the load balancers in your environment
+http:
+  public:
+    certificates: 
+      - ${CERTIFICATE_ARN}  # Use ACM certificate for HTTPS
+    security_groups:
+      ingress:
+        - ip_protocol: tcp
+          ports: [80, 443]
+          cidr: 0.0.0.0/0
+  private:
+    security_groups:
+      ingress:
+        - ip_protocol: tcp
+          ports: [3000-3999]
+
+# Configure observability for your environment resources
+observability:
+  container_insights: true
+
+# Environment variables and configurations
+variables:
+  ENVIRONMENT: production
+  REGION: us-east-1
+
+# Resource tags
+tags:
+  Application: MoneyFlow
+  Environment: Production
+  Team: Finance
+  ManagedBy: Copilot
+
+# Security and access control
+security:
+  # IAM roles for tasks
+  iam:
+    managed_policies:
+      - arn:aws:iam::aws:policy/AmazonRDSReadOnlyAccess
+      - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+
+# CDN configuration (Optional)
+cdn:
+  enabled: true
+  certificate: ${CERTIFICATE_ARN}
+  domain: app.moneyflow.example.com
+  minimum_ttl: 0
+  maximum_ttl: 31536000 # 1 year
+  default_ttl: 86400    # 1 day

@@ -1,0 +1,177 @@
+# AWS CloudFormation template for creating an RDS PostgreSQL instance
+# This will be used by the Copilot CLI to create database resources
+
+Parameters:
+  App:
+    Type: String
+    Description: Your application's name.
+  Env:
+    Type: String
+    Description: The environment name your service, job, or workflow is being deployed to.
+  Name:
+    Type: String
+    Description: The name of the service, job, or workflow being deployed.
+
+Resources:
+  # Security group for RDS instance
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for MoneyFlow RDS instance
+      VpcId:
+        Fn::ImportValue:
+          !Sub '${App}-${Env}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId:
+            Fn::ImportValue: !Sub '${App}-${Env}-EnvironmentSecurityGroup'
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-${Name}-rds-sg'
+
+  # Subnet group for RDS instance
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for MoneyFlow RDS instance
+      SubnetIds:
+        Fn::Split:
+          - ','
+          - Fn::ImportValue: !Sub '${App}-${Env}-PrivateSubnets'
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-${Name}-subnet-group'
+
+  # Parameter group for PostgreSQL configuration
+  DBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: Parameter group for PostgreSQL 14
+      Family: postgres14
+      Parameters:
+        max_connections: '100'
+        shared_buffers: '{DBInstanceClass}' # Auto-scaling based on instance size
+        work_mem: '4MB'
+        maintenance_work_mem: '64MB'
+        effective_cache_size: '{DBInstanceClass}' # Auto-scaling based on instance size
+        log_min_duration_statement: '1000' # Log slow queries
+        log_statement: 'none'
+        log_connections: '1'
+        log_disconnections: '1'
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-${Name}-parameter-group'
+
+  # RDS PostgreSQL instance
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      EngineVersion: '14.5'
+      DBInstanceIdentifier: !Sub '${App}-${Env}-${Name}-postgres'
+      DBName: money_flow
+      MasterUsername: postgres
+      MasterUserPassword: '{{resolve:secretsmanager:/moneyflow/prod/DB_PASSWORD:SecretString}}'
+      DBInstanceClass: db.t3.small
+      AllocatedStorage: 20
+      MaxAllocatedStorage: 100
+      StorageType: gp2
+      StorageEncrypted: true
+      MultiAZ: true
+      AutoMinorVersionUpgrade: true
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: 03:00-04:00
+      PreferredMaintenanceWindow: sun:04:00-sun:06:00
+      PubliclyAccessible: false
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBParameterGroupName: !Ref DBParameterGroup
+      EnablePerformanceInsights: true
+      PerformanceInsightsRetentionPeriod: 7
+      CopyTagsToSnapshot: true
+      DeleteAutomatedBackups: false
+      DeletionProtection: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${App}-${Env}-${Name}-postgres'
+        - Key: Application
+          Value: !Ref App
+        - Key: Environment
+          Value: !Ref Env
+
+  # CloudWatch alarms for database monitoring
+  CPUUtilizationAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${App}-${Env}-${Name}-rds-cpu-utilization'
+      AlarmDescription: Alarm if CPU utilization exceeds 80% for 5 minutes
+      Namespace: AWS/RDS
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DBInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: missing
+
+  FreeableMemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${App}-${Env}-${Name}-rds-freeable-memory'
+      AlarmDescription: Alarm if freeable memory falls below 100MB for 5 minutes
+      Namespace: AWS/RDS
+      MetricName: FreeableMemory
+      Dimensions:
+        - Name: DBInstanceIdentifier
+          Value: !Ref DBInstance
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 3
+      Threshold: 100000000  # 100MB in bytes
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: missing
+
+  # Secret for database credentials in Secrets Manager
+  DBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${App}-${Env}-${Name}-db-secret'
+      Description: PostgreSQL database credentials for Money Flow app
+      SecretString: !Sub '{"username":"postgres","password":"{{resolve:secretsmanager:/moneyflow/prod/DB_PASSWORD:SecretString}}","host":"${DBInstance.Endpoint.Address}","port":"5432","dbname":"money_flow"}'
+      Tags:
+        - Key: Application
+          Value: !Ref App
+        - Key: Environment
+          Value: !Ref Env
+
+Outputs:
+  DBClusterEndpoint:
+    Description: The connection endpoint for the database
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub '${App}-${Env}-${Name}-DBClusterEndpoint'
+
+  DBPort:
+    Description: The port the database is listening on
+    Value: !GetAtt DBInstance.Endpoint.Port
+    Export:
+      Name: !Sub '${App}-${Env}-${Name}-DBPort'
+
+  DBSecretARN:
+    Description: The ARN of the database secret in Secrets Manager
+    Value: !Ref DBSecret
+    Export:
+      Name: !Sub '${App}-${Env}-${Name}-DBSecretARN'
+
+  DBName:
+    Description: The name of the database
+    Value: money_flow
+    Export:
+      Name: !Sub '${App}-${Env}-${Name}-DBName'
+

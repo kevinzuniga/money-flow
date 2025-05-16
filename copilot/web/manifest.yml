@@ -1,0 +1,77 @@
+# The manifest for the "web" service.
+# Read the full specification for the "Load Balanced Web Service" type at:
+#  https://aws.github.io/copilot-cli/docs/manifest/lb-web-service/
+
+# Your service name will be used in naming your resources like log groups, ECS services, etc.
+name: web
+type: Load Balanced Web Service
+
+# Distribute traffic to your service.
+http:
+  # Requests to this path will be forwarded to your service.
+  # To match all requests you can use the "/" path.
+  path: '/'
+  # You can specify a custom health check path. The default is "/".
+  # healthcheck: '/'
+
+# Configuration for your containers and service.
+image:
+  build: ./Dockerfile
+  # Port exposed through your container to route traffic to it.
+  port: 3000
+
+cpu: 256       # Number of CPU units for the task.
+memory: 512    # Amount of memory in MiB used by the task.
+count: 2       # Number of tasks that should be running in your service.
+exec: true     # Enable running commands in your container.
+network:
+  connect: true # Enable Service Connect for intra-environment traffic between services.
+
+storage:
+  readonly_fs: false   # Allow write access for file uploads and temp files
+
+# Environment variables configuration
+variables:
+  NODE_ENV: production
+  PORT: 3000
+  LOG_LEVEL: info
+  NEXTAUTH_URL: https://${COPILOT_LB_DNS}
+  DB_PORT: 5432
+  DB_HOST: ${DB_CLUSTER_ENDPOINT}
+  DB_NAME: money_flow
+  DB_USER: postgres
+
+# Secrets from AWS Systems Manager Parameter Store
+secrets:
+  NEXTAUTH_SECRET: /moneyflow/prod/NEXTAUTH_SECRET
+  DB_PASSWORD: /moneyflow/prod/DB_PASSWORD
+  JWT_SECRET: /moneyflow/prod/JWT_SECRET
+
+# Auto-scaling configuration
+scaling:
+  cpu: 75      # Target CPU utilization (percentage)
+  memory: 75   # Target memory utilization (percentage)
+  min: 2       # Minimum number of tasks
+  max: 10      # Maximum number of tasks
+
+# Health check configuration
+http:
+  path: '/'
+  healthcheck:
+    path: '/api/health'
+    healthy_threshold: 3
+    unhealthy_threshold: 2
+    timeout: 5
+    interval: 30
+
+# Environment-specific configurations
+environments:
+  prod:
+    count: 2
+    deployment:
+      rolling: 'canary'
+      intervals: [10, 30, 60]
+  dev:
+    count: 1
+    deployment:
+      rolling: 'recreate'
