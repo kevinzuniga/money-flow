@@ -5,11 +5,18 @@ module.exports = defineConfig({
   e2e: {
     baseUrl: 'http://localhost:3000',
     supportFile: 'cypress/support/e2e.js',
-    defaultCommandTimeout: 10000,
+    specPattern: 'cypress/e2e/**/*.cy.{js,jsx,ts,tsx}',
     viewportWidth: 1280,
     viewportHeight: 720,
     video: false,
     screenshotOnRunFailure: true,
+    defaultCommandTimeout: 10000,
+    pageLoadTimeout: 30000,
+    experimentalRunAllSpecs: true,
+    retries: {
+      runMode: 2,
+      openMode: 0,
+    },
     
     setupNodeEvents(on, config) {
       // Database connection pool
@@ -97,19 +104,34 @@ module.exports = defineConfig({
         log(message) {
           console.log(message);
           return null;
+        },
+        
+        // Display tabular data in console
+        table(message) {
+          console.table(message);
+          return null;
         }
       });
       
       // Set up environment variables
       config.env = {
         ...config.env,
-        apiUrl: process.env.API_URL || 'http://localhost:3000/api',
+        API_URL: 'http://localhost:3000/api',
+        apiUrl: process.env.API_URL || 'http://localhost:3000/api', // Keep for backward compatibility
         testUserEmail: 'e2e-test@example.com',
         testUserPassword: 'password123',
       };
       
       return config;
     }
+  },
+  component: {
+    devServer: {
+      framework: 'next',
+      bundler: 'webpack',
+    },
+    supportFile: 'cypress/support/component.js',
+    specPattern: 'cypress/component/**/*.cy.{js,jsx,ts,tsx}',
   },
 });
 

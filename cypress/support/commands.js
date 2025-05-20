@@ -1,11 +1,11 @@
 /**
- * Custom Cypress commands
+ * Custom Cypress Commands
  * 
- * This file defines custom commands that can be used across all E2E tests
- * to simplify common operations.
+ * This file contains all custom commands used across the test suite.
+ * Commands are organized by feature area for better maintainability.
  */
 
-// Authentication commands
+// Authentication Commands
 Cypress.Commands.add('login', (email, password) => {
   cy.visit('/login');
   cy.get('[data-testid=email-input]').type(email);
@@ -26,7 +26,38 @@ Cypress.Commands.add('logout', () => {
   cy.getCookie('token').should('not.exist');
 });
 
-// Navigation commands
+Cypress.Commands.add('getAuthToken', () => {
+  return window.localStorage.getItem('token');
+});
+
+Cypress.Commands.add('setAuthToken', (token) => {
+  window.localStorage.setItem('token', token);
+});
+
+Cypress.Commands.add('clearAuth', () => {
+  window.localStorage.removeItem('token');
+  cy.clearCookies();
+});
+
+Cypress.Commands.add('apiLogin', (email, password) => {
+  cy.request({
+    method: 'POST',
+    url: `${Cypress.env('apiUrl')}/auth/login`,
+    body: { email, password }
+  }).then((response) => {
+    expect(response.status).to.eq(200);
+    expect(response.body.success).to.eq(true);
+    expect(response.body.data).to.have.property('token');
+    
+    // Store the token for future API requests
+    Cypress.env('token', response.body.data.token);
+    
+    // Set the cookie for frontend authentication
+    cy.setCookie('token', response.body.data.token);
+  });
+});
+
+// Navigation Commands
 Cypress.Commands.add('navigateTo', (route) => {
   const routes = {
     'dashboard': '/',
@@ -44,7 +75,22 @@ Cypress.Commands.add('navigateTo', (route) => {
   cy.url().should('include', path);
 });
 
-// Form helper commands
+Cypress.Commands.add('navigateToIngresos', () => {
+  cy.visit('/ingresos');
+  cy.url().should('include', '/ingresos');
+});
+
+Cypress.Commands.add('navigateToEgresos', () => {
+  cy.visit('/egresos');
+  cy.url().should('include', '/egresos');
+});
+
+Cypress.Commands.add('navigateToReportes', () => {
+  cy.visit('/reportes');
+  cy.url().should('include', '/reportes');
+});
+
+// Form Interaction Commands
 Cypress.Commands.add('fillIngresoForm', (data) => {
   cy.get('[data-testid=monto-input]').type(data.monto.toString());
   
@@ -113,7 +159,19 @@ Cypress.Commands.add('fillCategoriaForm', (data) => {
   }
 });
 
-// Data verification commands
+Cypress.Commands.add('fillTransactionForm', ({ amount, category, description, date }) => {
+  if (amount) cy.get('input[name="monto"]').type(amount);
+  if (category) cy.get('select[name="categoria"]').select(category);
+  if (description) cy.get('input[name="descripcion"]').type(description);
+  if (date) cy.get('input[name="fecha"]').type(date);
+});
+
+Cypress.Commands.add('submitForm', () => {
+  cy.get('button[type="submit"]').click();
+  cy.waitForAPI();
+});
+
+// Data Verification Commands
 Cypress.Commands.add('verifyIngreso', (data) => {
   cy.contains(data.descripcion).should('be.visible');
   
@@ -146,52 +204,137 @@ Cypress.Commands.add('verifyEgreso', (data) => {
   }
 });
 
-// API commands - for direct API testing or setup
-Cypress.Commands.add('apiLogin', (email, password) => {
-  cy.request({
-    method: 'POST',
-    url: `${Cypress.env('apiUrl')}/auth/login`,
-    body: { email, password }
-  }).then((response) => {
-    expect(response.status).to.eq(200);
-    expect(response.body.success).to.eq(true);
-    expect(response.body.data).to.have.property('token');
-    
-    // Store the token for future API requests
-    Cypress.env('token', response.body.data.token);
-    
-    // Set the cookie for frontend authentication
-    cy.setCookie('token', response.body.data.token);
-  });
+Cypress.Commands.add('verifyTransactionExists', (description, amount) => {
+  cy.contains('tr', description)
+    .should('exist')
+    .and('contain', amount);
 });
 
-Cypress.Commands.add('apiCreateIngreso', (data) => {
-  cy.request({
+Cypress.Commands.add('verifyTotalAmount', (selector, expectedAmount) => {
+  cy.get(selector)
+    .invoke('text')
+    .then((text) => {
+      const amount = parseFloat(text.replace(/[^0-9.-]+/g, ''));
+      expect(amount).to.equal(expectedAmount);
+    });
+});
+
+// Chart Testing Commands
+Cypress.Commands.add('verifyChartExists', () => {
+  cy.get('[data-testid="financial-chart"]')
+    .should('exist')
+    .and('be.visible');
+});
+
+// Date Selection Commands
+Cypress.Commands.add('selectMonth', (month) => {
+  cy.get('[data-testid="month-selector"]').select(month);
+});
+
+Cypress.Commands.add('selectYear', (year) => {
+  cy.get('[data-testid="year-selector"]').select(year);
+});
+
+// Data Management Commands
+Cypress.Commands.add('resetTestData', () => {
+  cy.task('resetDatabase');
+  cy.task('createTestData');
+});
+
+// API Testing Commands
+Cypress.Commands.add('apiCreateIncome', (data) => {
+  return cy.request({
     method: 'POST',
     url: `${Cypress.env('apiUrl')}/ingresos`,
     headers: {
-      Authorization: `Bearer ${Cypress.env('token')}`
+      Authorization: `Bearer ${window.localStorage.getItem('token')}`,
     },
-    body: data
-  }).then((response) => {
-    expect(response.status).to.eq(201);
-    expect(response.body.success).to.eq(true);
-    return response.body.data;
+    body: data,
   });
 });
 
-Cypress.Commands.add('apiCreateEgreso', (data) => {
-  cy.request({
+Cypress.Commands.add('apiCreateExpense', (data) => {
+  return cy.request({
     method: 'POST',
     url: `${Cypress.env('apiUrl')}/egresos`,
     headers: {
-      Authorization: `Bearer ${Cypress.env('token')}`
+      Authorization: `Bearer ${window.localStorage.getItem('token')}`,
     },
-    body: data
-  }).then((response) => {
-    expect(response.status).to.eq(201);
-    expect(response.body.success).to.eq(true);
-    return response.body.data;
+    body: data,
   });
 });
 
+Cypress.Commands.add('apiRequest', (method, endpoint, data = null) => {
+  return cy.request({
+    method,
+    url: `${Cypress.env('apiUrl')}${endpoint}`,
+    headers: {
+      'Authorization': `Bearer ${Cypress.env('token')}`,
+      'Content-Type': 'application/json',
+    },
+    body: data,
+    failOnStatusCode: false
+  });
+});
+
+// UI Component Testing Commands
+Cypress.Commands.add('getDataTestId', (testId) => {
+  return cy.get(`[data-testid="${testId}"]`);
+});
+
+Cypress.Commands.add('shouldBeVisible', { prevSubject: true }, (subject) => {
+  return cy.wrap(subject).should('be.visible');
+});
+
+Cypress.Commands.add('shouldNotExist', { prevSubject: true }, (subject) => {
+  return cy.wrap(subject).should('not.exist');
+});
+
+// Error Handling Commands
+Cypress.Commands.add('checkForErrors', () => {
+  cy.get('[data-testid="error-message"]').should('not.exist');
+  cy.get('[data-testid="alert-error"]').should('not.exist');
+});
+
+// Wait Commands
+Cypress.Commands.add('waitForAPI', () => {
+  cy.intercept('**').as('apiRequest');
+  cy.wait('@apiRequest');
+});
+
+Cypress.Commands.add('waitForLoading', () => {
+  cy.get('[data-testid="loading-spinner"]').should('not.exist');
+});
+
+// Utility Commands
+Cypress.Commands.add('formatCurrency', (amount) => {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    minimumFractionDigits: 2
+  }).format(amount);
+});
+
+// Custom Assertions
+Cypress.Commands.add('shouldHaveError', (message) => {
+  cy.get('[data-testid="error-message"]')
+    .should('be.visible')
+    .and('contain', message);
+});
+
+Cypress.Commands.add('shouldHaveSuccess', (message) => {
+  cy.get('[data-testid="success-message"]')
+    .should('be.visible')
+    .and('contain', message);
+});
+
+// Data operations
+Cypress.Commands.add('deleteAllTransactions', () => {
+  cy.request({
+    method: 'POST',
+    url: `${Cypress.env('apiUrl')}/test/cleanup`,
+    headers: {
+      Authorization: `Bearer ${window.localStorage.getItem('token')}`,
+    },
+  });
+});

@@ -11,8 +11,13 @@ http:
   # Requests to this path will be forwarded to your service.
   # To match all requests you can use the "/" path.
   path: '/'
-  # You can specify a custom health check path. The default is "/".
-  # healthcheck: '/'
+  # Healthcheck configuration for the service
+  healthcheck:
+    path: '/api/health'
+    healthy_threshold: 3
+    unhealthy_threshold: 2
+    timeout: 5
+    interval: 30
 
 # Configuration for your containers and service.
 image:
@@ -54,15 +59,6 @@ scaling:
   min: 2       # Minimum number of tasks
   max: 10      # Maximum number of tasks
 
-# Health check configuration
-http:
-  path: '/'
-  healthcheck:
-    path: '/api/health'
-    healthy_threshold: 3
-    unhealthy_threshold: 2
-    timeout: 5
-    interval: 30
 
 # Environment-specific configurations
 environments:

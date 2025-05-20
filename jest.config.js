@@ -1,50 +1,67 @@
 /**
  * Jest Configuration
  * 
- * This file configures Jest for testing the API endpoints.
+ * This file configures Jest for testing both API endpoints and React components.
  */
 
-module.exports = {
-  // Automatically clear mock calls and instances between every test
-  clearMocks: true,
+const nextJest = require('next/jest');
 
-  // The directory where Jest should output its coverage files
-  coverageDirectory: 'coverage',
+const createJestConfig = nextJest({
+  dir: './',
+});
 
-  // A list of paths to directories that Jest should use to search for files in
-  roots: ['<rootDir>'],
-
-  // The test environment that will be used for testing
-  testEnvironment: 'node',
-
-  // The glob patterns Jest uses to detect test files
-  testMatch: [
-    '**/__tests__/**/*.test.js',
-  ],
-
-  // An array of regexp pattern strings that are matched against all test paths
-  // matched tests are skipped
-  testPathIgnorePatterns: [
-    '/node_modules/',
-    '/.next/',
-  ],
-
-  // Setup files that run before each test
+const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/__tests__/setup.js'],
-
-  // A map from regular expressions to module names that allow to stub out resources
+  testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1',
+    '^@/components/(.*)$': '<rootDir>/components/$1',
+    '^@/contexts/(.*)$': '<rootDir>/contexts/$1',
+    '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
+    '^@/lib/(.*)$': '<rootDir>/lib/$1',
+    '^@/pages/(.*)$': '<rootDir>/pages/$1',
   },
-
-  // The maximum amount of workers used to run your tests
-  maxWorkers: '50%',
-
-  // Timeout for each test in milliseconds
+  coverageThreshold: {
+    global: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+  collectCoverageFrom: [
+    'components/**/*.{js,jsx,ts,tsx}',
+    'contexts/**/*.{js,jsx,ts,tsx}',
+    'hooks/**/*.{js,jsx,ts,tsx}',
+    'lib/**/*.{js,jsx,ts,tsx}',
+    'pages/**/*.{js,jsx,ts,tsx}',
+    '!pages/_app.js',
+    '!pages/_document.js',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+  ],
+  testMatch: [
+    '<rootDir>/__tests__/**/*.test.{js,jsx,ts,tsx}',
+    '<rootDir>/__tests__/**/*.spec.{js,jsx,ts,tsx}',
+  ],
+  watchPlugins: [
+    'jest-watch-typeahead/filename',
+    'jest-watch-typeahead/testname',
+  ],
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/',
+    '<rootDir>/.next/',
+    '<rootDir>/cypress/',
+  ],
+  transformIgnorePatterns: [
+    '/node_modules/',
+    '^.+\\.module\\.(css|sass|scss)$',
+  ],
+  moduleFileExtensions: ['js', 'jsx', 'ts', 'tsx', 'json', 'node'],
   testTimeout: 10000,
-
-  // Mock environment variables
-  // This will be overridden by setup.js
-  testEnvironment: 'node',
+  verbose: true,
+  clearMocks: true,
+  coverageDirectory: 'coverage',
+  maxWorkers: '50%',
 };
 
+module.exports = createJestConfig(customJestConfig);

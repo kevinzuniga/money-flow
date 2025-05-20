@@ -8,10 +8,9 @@
 // Import commands.js using ES2015 syntax:
 import './commands';
 
-// Configure Cypress behavior
+// Prevent uncaught exception warnings from polluting test logs
 Cypress.on('uncaught:exception', (err, runnable) => {
-  // Returning false here prevents Cypress from failing the test when
-  // an uncaught exception occurs in the application
+  // returning false here prevents Cypress from failing the test
   console.error('Uncaught exception:', err.message);
   return false;
 });
@@ -49,4 +48,68 @@ afterEach(() => {
   // Log the end of each test
   cy.log(`Completed test: ${Cypress.currentTest.title}`);
 });
+
+// Add custom commands for authentication
+Cypress.Commands.add('loginByUI', (email = Cypress.env('testUserEmail'), password = Cypress.env('testUserPassword')) => {
+  cy.visit('/');
+  cy.get('input[name="email"]').type(email);
+  cy.get('input[name="password"]').type(password);
+  cy.get('button[type="submit"]').click();
+  cy.url().should('not.include', '/login');
+});
+
+Cypress.Commands.add('loginByAPI', (email = Cypress.env('testUserEmail'), password = Cypress.env('testUserPassword')) => {
+  cy.request('POST', `${Cypress.env('API_URL')}/auth/login`, {
+    email,
+    password,
+  }).then((response) => {
+    expect(response.status).to.eq(200);
+    window.localStorage.setItem('token', response.body.token);
+  });
+});
+
+// Database commands
+Cypress.Commands.add('resetDatabase', () => {
+  cy.task('resetDatabase');
+});
+
+Cypress.Commands.add('seedTestData', () => {
+  cy.task('createTestData');
+});
+
+// Financial transaction commands
+Cypress.Commands.add('createIncome', (amount, category = 'Test Income', description = 'Test income') => {
+  cy.visit('/ingresos');
+  cy.get('[data-testid="add-transaction-button"]').click();
+  cy.get('input[name="monto"]').type(amount);
+  cy.get('select[name="categoria"]').select(category);
+  cy.get('input[name="descripcion"]').type(description);
+  cy.get('button[type="submit"]').click();
+});
+
+Cypress.Commands.add('createExpense', (amount, category = 'Test Expense', description = 'Test expense') => {
+  cy.visit('/egresos');
+  cy.get('[data-testid="add-transaction-button"]').click();
+  cy.get('input[name="monto"]').type(amount);
+  cy.get('select[name="categoria"]').select(category);
+  cy.get('input[name="descripcion"]').type(description);
+  cy.get('button[type="submit"]').click();
+});
+
+// API request interceptor
+Cypress.Commands.add('waitForAPI', () => {
+  cy.intercept('**').as('apiRequest');
+  cy.wait('@apiRequest');
+});
+
+// Utility commands
+Cypress.Commands.add('log', (message) => {
+  cy.task('log', message);
+});
+
+Cypress.Commands.add('table', (data) => {
+  cy.task('table', data);
+});
+
+// TypeScript type definitions will be added in separate file
 
