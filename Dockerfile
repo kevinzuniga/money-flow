@@ -10,10 +10,11 @@ RUN npm run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
+ENV HUSKY=0
 
 # Install only production dependencies
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 # Copy built assets from builder stage
 COPY --from=builder /app/.next ./.next
