@@ -13,7 +13,7 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "format": "prettier --write .",
-    "prepare": "husky install",
+    "setup-husky": "husky install",
     "// Database scripts": "",
     "db:init": "node scripts/init-db.js",
     "db:reset": "node scripts/init-db.js --reset --force",
