@@ -16,7 +16,9 @@ http:
 
 # Configuration for your containers and service.
 image:
-  location: ./Dockerfile
+  build: 
+    dockerfile: Dockerfile
+    context: .
   # Port exposed through your container to route traffic to it.
   port: 3000
 
@@ -31,27 +33,16 @@ network:
   # readonly_fs: true       # Limit to read-only access to mounted root filesystems.
 
 # Optional fields for more advanced use-cases.
+#
+#variables:                    # Pass environment variables as key value pairs.
+#  LOG_LEVEL: info
 
-variables:                    # Pass environment variables as key value pairs.
-  NODE_ENV: production
-  PORT: 3000
-  AWS_REGION: us-east-1
-  LOG_LEVEL: info
-  CORS_ORIGIN: "*"
-  SERVICE_NAME: money-flow-api
-
-secrets:                      # Pass secrets from AWS Systems Manager (SSM) Parameter Store.
-  DATABASE_URL: /moneyflow/api/DATABASE_URL  # The key is the name of the environment variable, the value is the name of the SSM parameter.
-  JWT_SECRET: /moneyflow/api/JWT_SECRET
-  SESSION_SECRET: /moneyflow/api/SESSION_SECRET
+#secrets:                      # Pass secrets from AWS Systems Manager (SSM) Parameter Store.
+#  GITHUB_TOKEN: GITHUB_TOKEN  # The key is the name of the environment variable, the value is the name of the SSM parameter.
 
 # You can override any of the values defined above by environment.
-environments:
-  test:
-    count: 1               # Number of tasks to run for the "test" environment.
-    deployment:            # The deployment strategy for the "test" environment.
-      rolling: 'recreate' # Stops existing tasks before new ones are started for faster deployments.
-    variables:
-      NODE_ENV: test
-      LOG_LEVEL: debug
-      CORS_ORIGIN: "*"
+#environments:
+#  test:
+#    count: 2               # Number of tasks to run for the "test" environment.
+#    deployment:            # The deployment strategy for the "test" environment.
+#       rolling: 'recreate' # Stops existing tasks before new ones are started for faster deployments.
