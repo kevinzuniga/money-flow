@@ -15,9 +15,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch user from database
+    // Fetch user from database with correct column name
     const result = await db.query(
-      'SELECT id, email, password, nombre FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, nombre FROM users WHERE email = $1',
       [email]
     );
 
@@ -28,8 +28,8 @@ export default async function handler(req, res) {
       return res.status(401).json({ message: 'Email o contraseña incorrectos' });
     }
 
-    // Validate password
-    const isValid = await bcrypt.compare(password, user.password);
+    // Validate password against password_hash
+    const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
       return res.status(401).json({ message: 'Email o contraseña incorrectos' });
     }
@@ -56,8 +56,8 @@ export default async function handler(req, res) {
       })
     );
 
-    // Return user info (without password)
-    const { password: _, ...userWithoutPassword } = user;
+    // Return user info (without password_hash)
+    const { password_hash: _, ...userWithoutPassword } = user;
     res.status(200).json({ 
       message: 'Login successful',
       user: userWithoutPassword

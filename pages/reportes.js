@@ -34,6 +34,9 @@ import {
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
+  CircularProgress,
+  CircularProgressLabel,
+  Badge,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, DownloadIcon, SettingsIcon } from '@chakra-ui/icons';
 import { useAuth } from '../contexts/AuthContext';
@@ -629,7 +632,11 @@ export default function Reportes() {
                           </Text>
                         </Box>
                         <HStack>
-                          <StatArrow type={incomeChange.value >= 0 ? 'increase' : 'decrease'} boxSize={6} />
+                          <Stat display="inline-block">
+                            <StatHelpText>
+                              <StatArrow type={incomeChange.value >= 0 ? 'increase' : 'decrease'} boxSize={6} />
+                            </StatHelpText>
+                          </Stat>
                           <Text fontSize="lg" fontWeight="medium" color={incomeChange.value >= 0 ? "green.500" : "red.500"}>
                             {incomeChange.value >= 0 ? "+" : ""}{incomeChange.percentage.toFixed(1)}%
                           </Text>
@@ -646,7 +653,11 @@ export default function Reportes() {
                           </Text>
                         </Box>
                         <HStack>
-                          <StatArrow type={expenseChange.value <= 0 ? 'decrease' : 'increase'} boxSize={6} />
+                          <Stat display="inline-block">
+                            <StatHelpText>
+                              <StatArrow type={expenseChange.value <= 0 ? 'decrease' : 'increase'} boxSize={6} />
+                            </StatHelpText>
+                          </Stat>
                           <Text fontSize="lg" fontWeight="medium" color={expenseChange.value <= 0 ? "green.500" : "red.500"}>
                             {expenseChange.value >= 0 ? "+" : ""}{expenseChange.percentage.toFixed(1)}%
                           </Text>
@@ -663,7 +674,11 @@ export default function Reportes() {
                           </Text>
                         </Box>
                         <HStack>
-                          <StatArrow type={balanceChange.value >= 0 ? 'increase' : 'decrease'} boxSize={6} />
+                          <Stat display="inline-block">
+                            <StatHelpText>
+                              <StatArrow type={balanceChange.value >= 0 ? 'increase' : 'decrease'} boxSize={6} />
+                            </StatHelpText>
+                          </Stat>
                           <Text fontSize="lg" fontWeight="medium" color={balanceChange.value >= 0 ? "green.500" : "red.500"}>
                             {balanceChange.value >= 0 ? "+" : ""}{balanceChange.percentage.toFixed(1)}%
                           </Text>
@@ -798,7 +813,11 @@ export default function Reportes() {
                       <Box p={3} borderWidth="1px" borderRadius="md">
                         <Text fontSize="sm" color="gray.500">Cambio vs. Período Anterior</Text>
                         <HStack spacing={1}>
-                          <StatArrow type={balanceChange.value >= 0 ? 'increase' : 'decrease'} />
+                          <Stat display="inline-block">
+                            <StatHelpText>
+                              <StatArrow type={balanceChange.value >= 0 ? 'increase' : 'decrease'} />
+                            </StatHelpText>
+                          </Stat>
                           <Text fontSize="lg" fontWeight="bold" color={balanceChange.value >= 0 ? "green.500" : "red.500"}>
                             {balanceChange.percentage.toFixed(1)}%
                           </Text>

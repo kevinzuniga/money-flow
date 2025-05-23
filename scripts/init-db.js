@@ -23,6 +23,7 @@ const dotenv = require('dotenv');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const fsPromises = fs.promises;
 const { seed } = require('./seed');
 const { migrate: createCategoriasTable } = require('../migrations/create_categorias_table');
 
@@ -43,21 +44,23 @@ function getDatabaseInfo() {
     throw new Error('DATABASE_URL environment variable not found');
   }
   
-  // Parse the URL - this is a simple implementation and may need enhancements
-  // for complex connection strings
-  let dbName, connString;
-  
   try {
-    const match = url.match(/\/([^?]+)(\?.*)?$/);
-    dbName = match ? match[1] : null;
+    // Use URL parsing to get the database name
+    const dbUrl = new URL(url.replace('postgresql://', 'http://'));
+    const dbName = dbUrl.pathname.split('/')[1];
     
-    // Connection string for postgres without specific database
-    connString = url.replace(/\/([^?]+)(\?.*)?$/, '/postgres');
+    // Create connection string for postgres database
+    const baseUrl = url.substring(0, url.lastIndexOf('/'));
+    const connString = `${baseUrl}/postgres${dbUrl.search}`;
+    
+    if (!dbName) {
+      throw new Error('Database name not found in DATABASE_URL');
+    }
+    
+    return { dbName, connString };
   } catch (error) {
     throw new Error(`Failed to parse DATABASE_URL: ${error.message}`);
   }
-  
-  return { dbName, connString };
 }
 
 /**
@@ -141,15 +144,42 @@ async function createDatabase(dbInfo) {
 }
 
 /**
+ * Execute SQL migration file
+ */
+async function executeSqlFile(filePath) {
+  console.log(`Running SQL migration: ${path.basename(filePath)}`);
+  const sql = await fsPromises.readFile(filePath, 'utf8');
+  
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  });
+  
+  try {
+    await pool.query(sql);
+    console.log(`✅ SQL migration completed: ${path.basename(filePath)}`);
+  } catch (error) {
+    console.error(`❌ SQL migration failed: ${path.basename(filePath)}`, error);
+    throw error;
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
  * Run migrations
  */
 async function runMigrations() {
   console.log('\n🔄 Running migrations...');
   
-  // For now, we only have one migration
   try {
+    // Run the initial schema SQL first
+    await executeSqlFile(path.join(__dirname, '../migrations/001_initial_schema.sql'));
+    
+    // Then run the categories table migration
     await createCategoriasTable();
-    console.log('✅ Migrations completed successfully');
+    
+    console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);
     throw error;
