@@ -21,7 +21,7 @@ describe('Token Refresh API', () => {
     password: 'Password123!',
     nombre: 'Refresh Test User'
   };
-  
+
   let accessToken;
-  let refresh
+  let refreshToken;
 
