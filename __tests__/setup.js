@@ -1,9 +1,14 @@
 /**
  * Test Setup and Teardown
- * 
+ *
  * This file provides setup and teardown functionality for tests,
  * including database configuration and test helpers.
  */
+
+// Polyfill for Node.js v18+ with pg module
+const { TextEncoder, TextDecoder } = require('util');
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
 
 const { Pool } = require('pg');
 const dotenv = require('dotenv');

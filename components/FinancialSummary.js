@@ -298,6 +298,7 @@ export default function FinancialSummary({
                     <Text fontWeight="medium">Tasa de Ahorro</Text>
                     <HStack>
                       <Stat>
+                        <StatLabel fontSize="sm">Tasa Actual</StatLabel>
                         <StatNumber fontSize="xl" color={isPositiveSavings ? "green.500" : "red.500"}>
                           {formatPercentage(Math.abs(savingsRate))}
                         </StatNumber>

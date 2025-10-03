@@ -1,8 +1,8 @@
 /**
- * Migration: Create Categories Table
+ * Migration: Create Indices for Categories Table
  * 
- * This migration creates the 'categorias' table for storing income and expense categories.
- * It includes system default categories and user-defined custom categories.
+ * This migration adds indices to the 'categorias' table for better performance.
+ * It assumes the table was already created in the initial schema.
  */
 
 const { Pool } = require('pg');
@@ -21,36 +21,20 @@ async function migrate() {
   const client = await pool.connect();
   
   try {
-    console.log('Starting migration: create_categorias_table');
+    console.log('Starting migration: create_categorias_indices');
     
     // Begin transaction
     await client.query('BEGIN');
-    
-    // Create the categories table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS categorias (
-        id SERIAL PRIMARY KEY,
-        nombre VARCHAR(50) NOT NULL,
-        tipo VARCHAR(10) NOT NULL CHECK (tipo IN ('ingreso', 'egreso', 'ambos')),
-        descripcion TEXT,
-        color VARCHAR(20),
-        icono VARCHAR(50),
-        user_id UUID,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES usuarios(id) ON DELETE CASCADE
-      );
-    `);
     
     // Create indexes for performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_categorias_user_id ON categorias(user_id);
       CREATE INDEX IF NOT EXISTS idx_categorias_tipo ON categorias(tipo);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_categorias_nombre_user_id 
-        ON categorias(nombre, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID));
+        ON categorias(nombre, COALESCE(user_id, 0));
     `);
     
-    // Add a trigger for updated_at
+    // Create or replace the trigger function
     await client.query(`
       CREATE OR REPLACE FUNCTION update_modified_column()
       RETURNS TRIGGER AS $$
@@ -59,19 +43,21 @@ async function migrate() {
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql;
-      
+    `);
+    
+    // Drop the trigger if it exists and create it again
+    await client.query(`
       DROP TRIGGER IF EXISTS set_timestamp ON categorias;
-      
       CREATE TRIGGER set_timestamp
-      BEFORE UPDATE ON categorias
-      FOR EACH ROW
-      EXECUTE FUNCTION update_modified_column();
+        BEFORE UPDATE ON categorias
+        FOR EACH ROW
+        EXECUTE FUNCTION update_modified_column();
     `);
     
     // Commit transaction
     await client.query('COMMIT');
     
-    console.log('Migration completed successfully: create_categorias_table');
+    console.log('Migration completed successfully: create_categorias_indices');
   } catch (error) {
     // Rollback transaction on error
     await client.query('ROLLBACK');

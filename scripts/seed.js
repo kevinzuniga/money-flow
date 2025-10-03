@@ -57,7 +57,7 @@ const DEFAULT_CATEGORIES = {
     { nombre: 'Otros gastos', color: '#9E9E9E', icono: 'more_horiz' }
   ],
   common: [
-    { nombre: 'Transferencias', color: '#00BCD4', icono: 'swap_horiz', tipo: 'ambos' }
+    { nombre: 'Transferencias', color: '#00BCD4', icono: 'swap_horiz', tipo: 'ingreso' }
   ]
 };
 
@@ -125,7 +125,7 @@ async function seed() {
         await client.query('TRUNCATE TABLE egresos CASCADE');
         await client.query('TRUNCATE TABLE categorias CASCADE');
         if (includeDev) {
-          await client.query('TRUNCATE TABLE usuarios CASCADE');
+          await client.query('TRUNCATE TABLE users CASCADE');
         }
       });
     }
@@ -137,12 +137,12 @@ async function seed() {
       for (const cat of DEFAULT_CATEGORIES.income) {
         const result = await client.query(
           `INSERT INTO categorias 
-           (nombre, color, icono, tipo, descripcion, user_id)
-           VALUES ($1, $2, $3, $4, $5, NULL)
-           ON CONFLICT (nombre, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
+           (nombre, color, icono, tipo, user_id)
+           VALUES ($1, $2, $3, $4, NULL)
+           ON CONFLICT (nombre, COALESCE(user_id, 0))
            DO UPDATE SET color = $2, icono = $3
            RETURNING id`,
-          [cat.nombre, cat.color, cat.icono, 'ingreso', `Categoría de ingreso: ${cat.nombre}`]
+          [cat.nombre, cat.color, cat.icono, 'ingreso']
         );
         categoryMap[cat.nombre] = result.rows[0].id;
       }
@@ -152,12 +152,12 @@ async function seed() {
       for (const cat of DEFAULT_CATEGORIES.expense) {
         const result = await client.query(
           `INSERT INTO categorias 
-           (nombre, color, icono, tipo, descripcion, user_id)
-           VALUES ($1, $2, $3, $4, $5, NULL)
-           ON CONFLICT (nombre, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
+           (nombre, color, icono, tipo, user_id)
+           VALUES ($1, $2, $3, $4, NULL)
+           ON CONFLICT (nombre, COALESCE(user_id, 0))
            DO UPDATE SET color = $2, icono = $3
            RETURNING id`,
-          [cat.nombre, cat.color, cat.icono, 'egreso', `Categoría de gasto: ${cat.nombre}`]
+          [cat.nombre, cat.color, cat.icono, 'egreso']
         );
         categoryMap[cat.nombre] = result.rows[0].id;
       }
@@ -165,16 +165,32 @@ async function seed() {
     
     await performStep('Creating common categories', async () => {
       for (const cat of DEFAULT_CATEGORIES.common) {
-        const result = await client.query(
+        // Insert as income category
+        const resultIncome = await client.query(
           `INSERT INTO categorias 
-           (nombre, color, icono, tipo, descripcion, user_id)
-           VALUES ($1, $2, $3, $4, $5, NULL)
-           ON CONFLICT (nombre, COALESCE(user_id, '00000000-0000-0000-0000-000000000000'::UUID))
+           (nombre, color, icono, tipo, user_id)
+           VALUES ($1, $2, $3, $4, NULL)
+           ON CONFLICT (nombre, COALESCE(user_id, 0))
            DO UPDATE SET color = $2, icono = $3
            RETURNING id`,
-          [cat.nombre, cat.color, cat.icono, cat.tipo || 'ambos', `Categoría común: ${cat.nombre}`]
+          [cat.nombre + ' (Ingreso)', cat.color, cat.icono, 'ingreso']
         );
-        categoryMap[cat.nombre] = result.rows[0].id;
+        categoryMap[cat.nombre + '_ingreso'] = resultIncome.rows[0].id;
+
+        // Insert as expense category
+        const resultEgreso = await client.query(
+          `INSERT INTO categorias 
+           (nombre, color, icono, tipo, user_id)
+           VALUES ($1, $2, $3, $4, NULL)
+           ON CONFLICT (nombre, COALESCE(user_id, 0))
+           DO UPDATE SET color = $2, icono = $3
+           RETURNING id`,
+          [cat.nombre + ' (Egreso)', cat.color, cat.icono, 'egreso']
+        );
+        categoryMap[cat.nombre + '_egreso'] = resultEgreso.rows[0].id;
+        
+        // Store the original name for backward compatibility
+        categoryMap[cat.nombre] = resultIncome.rows[0].id;
       }
     });
     
@@ -185,13 +201,13 @@ async function seed() {
       await performStep('Creating demo user', async () => {
         const hashedPassword = await bcrypt.hash(SAMPLE_DATA.users[0].password, 10);
         const result = await client.query(
-          `INSERT INTO usuarios 
-           (id, nombre, email, password_hash, is_active)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO users 
+           (nombre, email, password_hash)
+           VALUES ($1, $2, $3)
            ON CONFLICT (email) 
-           DO UPDATE SET nombre = $2, password_hash = $4
+           DO UPDATE SET nombre = $1, password_hash = $3
            RETURNING id`,
-          [uuidv4(), SAMPLE_DATA.users[0].nombre, SAMPLE_DATA.users[0].email, hashedPassword, true]
+          [SAMPLE_DATA.users[0].nombre, SAMPLE_DATA.users[0].email, hashedPassword]
         );
         demoUserId = result.rows[0].id;
       });
@@ -200,7 +216,7 @@ async function seed() {
         for (const income of SAMPLE_DATA.ingresos) {
           await client.query(
             `INSERT INTO ingresos 
-             (monto, descripcion, fecha, categoria, user_id)
+             (monto, descripcion, fecha, categoria_id, user_id)
              VALUES ($1, $2, $3, $4, $5)`,
             [income.monto, income.descripcion, income.fecha, categoryMap[income.categoria], demoUserId]
           );
@@ -211,7 +227,7 @@ async function seed() {
         for (const expense of SAMPLE_DATA.egresos) {
           await client.query(
             `INSERT INTO egresos 
-             (monto, descripcion, fecha, categoria, user_id)
+             (monto, descripcion, fecha, categoria_id, user_id)
              VALUES ($1, $2, $3, $4, $5)`,
             [expense.monto, expense.descripcion, expense.fecha, categoryMap[expense.categoria], demoUserId]
           );
