@@ -134,101 +134,142 @@ export default function Dashboard() {
       }
     }
   }, [isClient, user]); // Depend on isClient and user state
-  // Flag for API enablement
+  // Flag for API enablement - prevents unnecessary API calls during SSR or initial render
   const fetchEnabled = isClient && selectedYear !== null;
   
-  // Memoize date params
+  // Shared configuration for all data fetching hooks
+  const sharedHookConfig = useMemo(() => ({
+    enabled: fetchEnabled,
+    cacheTime: 1000 * 60 * 10, // Cache for 10 minutes
+    staleTime: 1000 * 60 * 5,  // Consider data stale after 5 minutes
+    dedupingInterval: 800,     // Prevent duplicate requests within 800ms - increased to ensure better deduplication
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnReconnect: false,   // Don't refetch on reconnect
+    retryCount: 1,              // Only retry once to prevent excessive requests
+    retryDelay: 2000,           // Wait 2 seconds before retrying
+  }), [fetchEnabled]);
+  
+  // Memoize date params for summary data
   const dateParams = useMemo(() => ({
     groupBy: period,
     year: selectedYear,
-    month: period === 'month' ? selectedMonth : undefined
+    month: period === 'month' ? selectedMonth : undefined,
+    _requestId: `${period}-${selectedYear}-${selectedMonth}` // Add a unique identifier to prevent duplicate requests
   }), [period, selectedYear, selectedMonth]);
   
-  // First initialize the financial data hooks to get refetchSummary
+  // Single effect to update date params when period changes
+  const handlePeriodChangeDebounced = useCallback(
+    debounce((newPeriod) => {
+      console.log(`Period changed to ${newPeriod}`);
+      setPeriod(newPeriod);
+    }, DEBOUNCE_MS),
+    []
+  );
+  
+  // Handle year change with debounce
+  const handleYearChangeDebounced = useCallback(
+    debounce((year) => {
+      console.log(`Year changed to ${year}`);
+      setSelectedYear(year);
+    }, DEBOUNCE_MS),
+    []
+  );
+  
+  // Handle month change with debounce
+  const handleMonthChangeDebounced = useCallback(
+    debounce((month) => {
+      console.log(`Month changed to ${month}`);
+      setSelectedMonth(month);
+    }, DEBOUNCE_MS),
+    []
+  );
+  
+  // Clean up debounce handlers on unmount
+  useEffect(() => {
+    return () => {
+      handlePeriodChangeDebounced.cancel();
+      handleYearChangeDebounced.cancel();
+      handleMonthChangeDebounced.cancel();
+    };
+  }, [handlePeriodChangeDebounced, handleYearChangeDebounced, handleMonthChangeDebounced]);
+  
+  // Fetch financial summary data
   const { 
     data: summaryData, 
     loading: summaryLoading, 
     error: summaryError,
-    refetch: refetchSummary
+    status: summaryStatus,
+    refetch: refetchSummary,
+    invalidateCache: invalidateSummaryCache
   } = useFinancialData(
     '/api/reportes/totales', 
     dateParams,
-    { 
-      enabled: fetchEnabled,
-      cacheTime: 1000 * 60 * 5, // Cache for 5 minutes
-      staleTime: 1000 * 60 * 2, // Increase stale time to 2 minutes
-      refetchOnWindowFocus: false, // Prevent refetch on window focus
-      refetchOnReconnect: false // Prevent refetch on reconnect
-    }
+    sharedHookConfig
   );
   
-  // Debounced update function for totals with fetchEnabled check
-  const debouncedFetchTotals = useCallback(
-    debounce((params) => {
-      if (fetchEnabled && params.year && !summaryLoading) {
-        refetchSummary();
-      }
-    }, DEBOUNCE_MS, { maxWait: 2000 }), // Add maxWait to prevent excessive debouncing
-    [fetchEnabled, refetchSummary, summaryLoading]
-  );
-  
-  // Effect to handle summary data fetching with debounce and fetchEnabled
-  useEffect(() => {
-    if (fetchEnabled) {
-      debouncedFetchTotals(dateParams);
-    }
-    return () => {
-      debouncedFetchTotals.cancel();
-    };
-  }, [fetchEnabled, dateParams, debouncedFetchTotals]);
-  
-  // Fetch recent income transactions with pagination using fetchEnabled
+  // Fetch recent income transactions with pagination - using different fetch timing
   const { 
     data: incomesData, 
     loading: incomesLoading, 
-    error: incomesError
+    error: incomesError,
+    status: incomesStatus,
+    refetch: refetchIncomes
   } = useFinancialData(
     '/api/ingresos', 
     requestParams,
     {
-      enabled: fetchEnabled,
-      cacheTime: 1000 * 60 * 5, // Cache for 5 minutes
-      staleTime: 1000 * 60 * 2, // Increase stale time to 2 minutes
-      refetchOnWindowFocus: false, // Prevent refetch on window focus
-      refetchOnReconnect: false // Prevent refetch on reconnect
+      ...sharedHookConfig,
+      // Only fetch after summary data is loaded to prevent simultaneous requests
+      enabled: fetchEnabled && (summaryStatus === 'success' || summaryStatus === 'error'),
+      // Add a small delay to stagger requests and prevent simultaneous loading
+      initialFetchDelay: 300
     }
   );
   
-  // Fetch recent expense transactions with pagination using fetchEnabled
+  // Fetch recent expense transactions with pagination - using different fetch timing
   const { 
     data: expensesData, 
     loading: expensesLoading, 
-    error: expensesError
+    error: expensesError,
+    status: expensesStatus,
+    refetch: refetchExpenses
   } = useFinancialData(
     '/api/egresos', 
     requestParams,
     {
-      enabled: fetchEnabled,
-      cacheTime: 1000 * 60 * 5, // Cache for 5 minutes
-      staleTime: 1000 * 60 * 2, // Increase stale time to 2 minutes
-      refetchOnWindowFocus: false, // Prevent refetch on window focus
-      refetchOnReconnect: false // Prevent refetch on reconnect
+      ...sharedHookConfig,
+      // Only fetch after incomes data is loaded to create a sequence of requests
+      enabled: fetchEnabled && (incomesStatus === 'success' || incomesStatus === 'error'),
+      // Add a small delay to stagger requests and prevent simultaneous loading
+      initialFetchDelay: 600
     }
   );
   
-  // Handle period change (month/year)
+  // Handle period change (month/year) with debouncing
   const handlePeriodChange = (newPeriod) => {
-    setPeriod(newPeriod);
+    // Avoid unnecessary updates if period hasn't changed
+    if (newPeriod === period) return;
+    
+    // Use debounced version to prevent rapid changes
+    handlePeriodChangeDebounced(newPeriod);
   };
   
-  // Handle year change
+  // Handle year change with debouncing
   const handleYearChange = (year) => {
-    setSelectedYear(year);
+    // Avoid unnecessary updates if year hasn't changed
+    if (year === selectedYear) return;
+    
+    // Use debounced version to prevent rapid changes
+    handleYearChangeDebounced(year);
   };
   
-  // Handle month change
+  // Handle month change with debouncing
   const handleMonthChange = (month) => {
-    setSelectedMonth(month);
+    // Avoid unnecessary updates if month hasn't changed
+    if (month === selectedMonth) return;
+    
+    // Use debounced version to prevent rapid changes
+    handleMonthChangeDebounced(month);
   };
   
   // Handle tab change
@@ -277,10 +318,10 @@ export default function Dashboard() {
     return <Text>{text}</Text>;
   };
   
-  // Handle refresh data with client-side toast using fetchEnabled
+  // Enhanced refresh function that updates all data with proper sequencing
   const handleRefresh = useCallback(() => {
     if (fetchEnabled) {
-      refetchSummary(true); // Force refetch ignoring cache
+      // Show toast notification
       toast({
         title: "Actualizando datos",
         description: "Los datos financieros están siendo actualizados",
@@ -288,8 +329,51 @@ export default function Dashboard() {
         duration: 3000,
         isClosable: true,
       });
+      
+      // Reset error states
+      setHasError(false);
+      setErrorInfo(null);
+      
+      // First invalidate and refetch summary data
+      invalidateSummaryCache()
+        // Add delay between requests to prevent flooding the server
+        .then(() => new Promise(resolve => setTimeout(() => resolve(), 500)))
+        .then(() => {
+          // Then refetch transactions data sequentially to prevent simultaneous requests
+          return refetchIncomes({ force: true });
+        })
+        // Add delay between requests to prevent flooding the server
+        .then(() => new Promise(resolve => setTimeout(() => resolve(), 500)))
+        .then(() => {
+          return refetchExpenses({ force: true });
+        })
+        .then(() => {
+          toast({
+            title: "Datos actualizados",
+            description: "La información financiera ha sido actualizada correctamente",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
+        })
+        .catch(error => {
+          console.error("Error refreshing data:", error);
+          toast({
+            title: "Error al actualizar",
+            description: "No se pudieron actualizar todos los datos. Intente nuevamente.",
+            status: "error",
+            duration: 4000,
+            isClosable: true,
+          });
+        });
     }
-  }, [refetchSummary, toast, fetchEnabled]);
+  }, [
+    fetchEnabled, 
+    toast, 
+    invalidateSummaryCache, 
+    refetchIncomes, 
+    refetchExpenses
+  ]);
   
   // Navigate to register income page
   const navigateToAddIncome = () => {
@@ -365,16 +449,50 @@ export default function Dashboard() {
     </Flex>
   );
   
-  // Error handling boundary - only run on client side using fetchEnabled
+  // Memoized loading and error states to prevent unnecessary rerenders
+  const loadingStates = useMemo(() => ({
+    anySummaryLoading: summaryLoading,
+    anyTransactionsLoading: incomesLoading || expensesLoading,
+    anyLoading: summaryLoading || incomesLoading || expensesLoading,
+    allLoaded: !summaryLoading && !incomesLoading && !expensesLoading && summaryData !== null
+  }), [summaryLoading, incomesLoading, expensesLoading, summaryData]);
+  
+  // Consolidated error handling 
   useEffect(() => {
     if (fetchEnabled) {
       const anyError = summaryError || incomesError || expensesError;
+      
       if (anyError) {
         setHasError(true);
-        setErrorInfo(anyError);
+        // Determine which error to display based on priority
+        const errorToShow = summaryError || incomesError || expensesError;
+        setErrorInfo(typeof errorToShow === 'string' 
+          ? errorToShow 
+          : errorToShow?.message || 'Error desconocido en la carga de datos');
+
+        // Log detailed error information for debugging
+        console.error('Dashboard error details:', {
+          summaryError,
+          incomesError,
+          expensesError,
+          timestamp: new Date().toISOString()
+        });
+
+        // Show error toast only once
+        toast({
+          title: 'Error al cargar datos',
+          description: 'Algunos datos no pudieron ser cargados correctamente',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        // Reset error state if all data loads successfully
+        setHasError(false);
+        setErrorInfo(null);
       }
     }
-  }, [summaryError, incomesError, expensesError, fetchEnabled]);
+  }, [fetchEnabled, summaryError, incomesError, expensesError, toast]);
 
   // Primary Guard: Handles SSR. Server sends this, client's first paint matches this.
   if (!isClient) {
